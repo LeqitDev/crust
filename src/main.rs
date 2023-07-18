@@ -4,6 +4,8 @@ use serde::{Serialize, Deserialize};
 
 use rustyline::{Config, Editor, Result, error::ReadlineError, completion::Completer, Context, highlight::Highlighter, Helper, Validator, hint::Hinter};
 
+use indoc::indoc;
+
 #[macro_use]
 extern crate diesel;
 
@@ -90,6 +92,15 @@ fn main() -> Result<()> {
         }
     }
     
+    let help_msg = indoc! {"
+    \x1b[1;32mhelp\x1b[0m: print this little help text
+    \x1b[1;32mexit\x1b[0m: exits the application
+    \x1b[1;32madd-location [path] [prefix]\x1b[0m: adds a new location (parent folder) with projectfolder inside
+                                  the prefix is used to diffirentiate between same projectnames in different locations
+                                  it has to be unique
+    \x1b[1;32mlist\x1b[0m: list all projects
+    \x1b[1;32m[prefix].[projectname]\x1b[0m: opens the project. if the projectname is not known a plain rust project will be created in the folder of the prefix path"};
+
     let projects = get_all_projects(); // get projects from file
 
     let mut complete_projects = vec![];
@@ -147,7 +158,7 @@ fn main() -> Result<()> {
 
                 match cmd {
                     "help" => {
-
+                        println!("{}", help_msg);
                     }
                     "exit" => {
                         println!("bye!");
