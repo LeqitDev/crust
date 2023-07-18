@@ -1,8 +1,16 @@
-use std::{fs::{metadata, create_dir, read_to_string, File, read_dir, write}, io::Write, borrow::Cow::{Owned, Borrowed, self}, collections::HashMap};
+use std::{fs::{metadata, create_dir, File, read_dir}, borrow::Cow::{Owned, Borrowed, self}};
 
 use serde::{Serialize, Deserialize};
 
 use rustyline::{Config, Editor, Result, error::ReadlineError, completion::Completer, Context, highlight::Highlighter, Helper, Validator, hint::Hinter};
+
+#[macro_use]
+extern crate diesel;
+
+extern crate dotenv;
+
+mod db;
+use db::*;
 
 // Helper Struct
 #[derive(Helper, Validator)]
@@ -67,58 +75,40 @@ impl Highlighter for MyHelper {
     }
 }
 
-// json object holding all paths + projects
-// TODO: add default workspace others need prefix
-// TODO: add description or other metadata
 #[derive(Debug, Serialize, Deserialize)]
-struct Projects {
-    #[serde(flatten)]
-    paths: HashMap<String, Vec<String>>,
-}
-
-impl Projects {
-    fn fetch_projects() -> Projects {
-        // try to read config/projects.json or else create it
-        let file = read_to_string("config/projects.json").unwrap_or_else(|_| {
-            let mut f = File::create("config/projects.json").expect("Couldn't create projects file!");
-            f.write_all(b"{}").expect("Couldn't write to packages.json!");
-            read_to_string("config/projects.json").expect("Couldn't read created projects file!")
-        });
-    
-        // path json to json object if empty create new empty json object
-        match serde_json::from_str::<Projects>(&file) {
-            Ok(projects) => projects,
-            Err(_) => Projects { paths: HashMap::default() },
-        }
-    }
-
-    fn add_path(&mut self, path: String, projects: Vec<String>) {
-        self.paths.insert(path, projects); // add to json object
-
-        // save to config/projects.json
-        let json_string = serde_json::to_string_pretty(&self).expect("Couldn't convert object to pretty string!");
-        let _ = write("config/projects.json", json_string);
-    }
+struct Path {
+    projects: Vec<String>,
+    prefix: String,
 }
 
 fn main() -> Result<()> {
     // create config folder if not yet existing
     if !metadata("config").is_ok() {
         create_dir("config").expect("Couldn't create config folder!");
+        if !metadata("config/db.sqlite3").is_ok() {
+            File::create("config/db.sqlite3").expect("Couldn't create projects file!");
+        }
+    }
+    
+    let projects = get_all_projects(); // get projects from file
+
+    let mut complete_projects = vec![];
+
+    for path in &projects.paths {
+        path.projects.iter().for_each(|p| complete_projects.push(format!("{}.{}", path.prefix, p)));
     }
 
+    let mut commands = vec![
+        "help".to_string(), 
+        "exit".to_string(), 
+        "add-location".to_string(), 
+        "list".to_string(),
+        ];
+
+    commands.append(&mut complete_projects);
+
     let config = Config::builder().auto_add_history(true).build(); // set config with history
-    // TODO: create builder ::new(Vec<&str>) -> MyHelper
-    let h = MyHelper {
-        commands: vec![
-            "help".to_string(), 
-            "exit".to_string(), 
-            "exit now".to_string(),
-            "exit not-now".to_string(),
-            "add-location".to_string(), 
-            "list".to_string()
-            ]
-        }; // create helper with commands
+    let h = MyHelper {commands}; // create helper with commands
     
     // load sqlhistory
     let history = if false {
@@ -132,8 +122,6 @@ fn main() -> Result<()> {
     // create editor and set helper
     let mut rl: Editor<MyHelper, _> = Editor::with_history(config, history)?;
     rl.set_helper(Some(h));
-    
-    let mut projects = Projects::fetch_projects(); // get projects from file
 
     // welcome msg
     println!("Welcome to...");
@@ -166,7 +154,7 @@ fn main() -> Result<()> {
                         break;
                     },
                     "add-location" => {
-                        let (ok, projects_size) = add_path(&mut projects, args[0].to_string()); // try adding path to resources
+                        let (ok, projects_size) = add_path(args[0].to_string(), args[1].to_string()); // try adding path to resources
                         if ok { // path valid
                             println!("Successfully added '{}'{}!", args[0], format!(" and {} projects", projects_size));
                         } else {
@@ -189,22 +177,22 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn print_projects(projects: &Projects) {
+fn print_projects(projects: &Index) {
     if projects.paths.len() == 0 {
-        println!("No projects registered yet!\nTry 'add-location [path]' to add a directory with projects!\n");
+        println!("No projects registered yet!\nTry 'add-location [path] [prefix]' to add a directory with projects!\n");
         return;
     }
     println!("Included projects:");
-    for (path, project_names) in &projects.paths {
-        println!("{path}:");
-        for project_name in project_names {
+    for path_index in &projects.paths {
+        println!("{}:", path_index.path);
+        for project_name in &path_index.projects {
             println!("\t- {project_name}");
         }
     }
     println!("");
 }
 
-fn add_path(projects: &mut Projects, path: String) -> (bool, usize) {
+fn add_path(path: String, prefix: String) -> (bool, usize) {
     if !is_valid_folder_path(&path) {
         return (false, 0);
     }
@@ -232,7 +220,14 @@ fn add_path(projects: &mut Projects, path: String) -> (bool, usize) {
         }
     }
     let projects_size = &project_names.len();
-    projects.add_path(path, project_names);
+
+    let path_id = create_path(&path, &prefix);
+
+    for p_name in project_names {
+        let _ = create_project(&p_name, &path_id);
+    }
+
+    // projects.add_path(path, Path {projects: project_names, prefix});
     (true, *projects_size)
 }
 

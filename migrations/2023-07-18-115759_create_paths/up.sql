@@ -1,0 +1,6 @@
+-- Your SQL goes here
+CREATE TABLE paths (
+    id VARCHAR NOT NULL PRIMARY KEY UNIQUE,
+    path TEXT NOT NULL,
+    prefix TEXT NOT NULL UNIQUE
+);
