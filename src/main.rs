@@ -1,4 +1,4 @@
-use std::{fs::{metadata, create_dir, File, read_dir}, borrow::Cow::{Owned, Borrowed, self}};
+use std::{fs::{metadata, create_dir, File, read_dir}, borrow::Cow::{Owned, Borrowed, self}, process::Command};
 
 use serde::{Serialize, Deserialize};
 
@@ -84,11 +84,13 @@ struct Path {
 }
 
 fn main() -> Result<()> {
+    let mut create_tables = false;
     // create config folder if not yet existing
     if !metadata("config").is_ok() {
         create_dir("config").expect("Couldn't create config folder!");
         if !metadata("config/db.sqlite3").is_ok() {
             File::create("config/db.sqlite3").expect("Couldn't create projects file!");
+            create_tables = true;
         }
     }
     
@@ -101,7 +103,7 @@ fn main() -> Result<()> {
     \x1b[1;32mlist\x1b[0m: list all projects
     \x1b[1;32m[prefix].[projectname]\x1b[0m: opens the project. if the projectname is not known a plain rust project will be created in the folder of the prefix path"};
 
-    let projects = get_all_projects(); // get projects from file
+    let projects = get_all_projects(create_tables); // get projects from file
 
     let mut complete_projects = vec![];
 
@@ -116,7 +118,7 @@ fn main() -> Result<()> {
         "list".to_string(),
         ];
 
-    commands.append(&mut complete_projects);
+    commands.append(&mut complete_projects.clone());
 
     let config = Config::builder().auto_add_history(true).build(); // set config with history
     let h = MyHelper {commands}; // create helper with commands
@@ -164,12 +166,38 @@ fn main() -> Result<()> {
                         println!("bye!");
                         break;
                     },
+                    "list" => {
+                        print_projects(&projects);
+                    }
                     "add-location" => {
                         let (ok, projects_size) = add_path(args[0].to_string(), args[1].to_string()); // try adding path to resources
                         if ok { // path valid
                             println!("Successfully added '{}'{}!", args[0], format!(" and {} projects", projects_size));
                         } else {
                             println!("Couldn't add '{}'!", args[0]);
+                        }
+                    },
+                    _ if complete_projects.contains(&cmd.to_string()) => {
+                        let split: Vec<&str> = cmd.split(".").collect();
+                        let prefix = split[0];
+                        let project_name = split[1];
+                        println!("Opening {} with Visual Studio Code...", &project_name);
+    
+                        let path = format!("{}\\{}", &projects.paths.iter().filter(|path| path.prefix == prefix.to_string()).next().unwrap().path, project_name); // retrieve path from prefix
+                        Command::new("cmd").arg("/c").arg("code").arg(&path).spawn().expect("Couldn't run vscode command!"); // open with vscode
+                    },
+                    _ if cmd.contains(".") => {
+                        let split = cmd.split(".").collect::<Vec<&str>>();
+                        if let Some(path) = projects.paths.iter().filter(|p| p.prefix == split[0]).next() {
+                            println!("Creating project {} at path {}", split[1], path.path);
+
+                            let project_dir = format!("{}\\{}", path.path, split[1]);
+                            Command::new("cmd").args(["/c", "cargo", "new", &project_dir]).status().expect("Couldn't create new rust project!"); // create new project
+
+                            println!("Opening {} with Visual Studio Code...", &split[1]);
+                            Command::new("cmd").arg("/c").arg("code").arg(&project_dir).spawn().expect("Couldn't run vscode command!"); // open with vscode
+                        } else {
+                            println!("Unknown command try 'help' for command list!");
                         }
                     }
                     _ => println!("Unknown command try 'help' for command list!"),

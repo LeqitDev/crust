@@ -1,6 +1,6 @@
 use std::env;
 
-use diesel::{SqliteConnection, Connection};
+use diesel::{SqliteConnection, Connection, sql_query};
 use diesel::prelude::*;
 use dotenv::dotenv;
 use uuid::Uuid;
@@ -17,6 +17,7 @@ pub struct Index {
 }
 
 pub struct PathIndex {
+    pub id: String,
     pub path: String,
     pub prefix: String,
     pub projects: Vec<String>, // TODO: Add a whole object with description or other metadata
@@ -59,14 +60,19 @@ pub fn create_project(project_name: &str, project_path_id: &str) -> String {
     uuid
 }
 
-pub fn get_all_projects() -> Index {
+pub fn get_all_projects(create_tables: bool) -> Index {
     let mut connection = establish_connection();
+    if create_tables {
+        sql_query(include_str!("create_paths.sql")).execute(&mut connection).expect("Couldn't create paths table!");
+        sql_query(include_str!("create_projects.sql")).execute(&mut connection).expect("Couldn't create projects table!");
+    }
     let mut path_indexes: Vec<PathIndex> = vec![];
 
     let ps = paths.load::<Path>(&mut connection).expect("Error loading paths!");
     for p in ps {
+        let uuid = p.id.clone();
         let project_list: Vec<Project> = projects.filter(path_id.eq(p.id)).load::<Project>(&mut connection).expect("Error loading projects!");
-        path_indexes.push(PathIndex { path: p.path, prefix: p.prefix, projects: project_list.iter().map(|p| &p.name).cloned().collect() });
+        path_indexes.push(PathIndex { id: uuid, path: p.path, prefix: p.prefix, projects: project_list.iter().map(|p| &p.name).cloned().collect() });
     }
 
     Index { paths: path_indexes }
