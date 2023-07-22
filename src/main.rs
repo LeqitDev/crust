@@ -103,22 +103,9 @@ fn main() -> Result<()> {
     \x1b[1;32mlist\x1b[0m: list all projects
     \x1b[1;32m[prefix].[projectname]\x1b[0m: opens the project. if the projectname is not known a plain rust project will be created in the folder of the prefix path"};
 
-    let projects = get_all_projects(create_tables); // get projects from file
+    let mut projects = get_all_projects(create_tables); // get projects from file
 
-    let mut complete_projects = vec![];
-
-    for path in &projects.paths {
-        path.projects.iter().for_each(|p| complete_projects.push(format!("{}.{}", path.prefix, p)));
-    }
-
-    let mut commands = vec![
-        "help".to_string(), 
-        "exit".to_string(), 
-        "add-location".to_string(), 
-        "list".to_string(),
-        ];
-
-    commands.append(&mut complete_projects.clone());
+    let (mut complete_projects, mut commands) = initialize(&projects);
 
     let config = Config::builder().auto_add_history(true).build(); // set config with history
     let h = MyHelper {commands}; // create helper with commands
@@ -196,6 +183,12 @@ fn main() -> Result<()> {
 
                             println!("Opening {} with Visual Studio Code...", &split[1]);
                             Command::new("cmd").arg("/c").arg("code").arg(&project_dir).spawn().expect("Couldn't run vscode command!"); // open with vscode
+
+                            let _ = create_project(&split.get(1).unwrap(), &path.id);
+                            projects = get_all_projects(false);
+                            let commands = initialize(&projects).1;
+                            let h = MyHelper {commands}; // create helper with commands
+                            rl.set_helper(Some(h));
                         } else {
                             println!("Unknown command try 'help' for command list!");
                         }
@@ -276,4 +269,23 @@ fn is_valid_folder_path(path: &String) -> bool {
     } else {
         false
     }
+}
+
+fn initialize(projects: &Index) -> (Vec<String>, Vec<String>) {
+    let mut complete_projects = vec![];
+
+    for path in &projects.paths {
+        path.projects.iter().for_each(|p| complete_projects.push(format!("{}.{}", path.prefix, p)));
+    }
+
+    let mut commands = vec![
+        "help".to_string(), 
+        "exit".to_string(), 
+        "add-location".to_string(), 
+        "list".to_string(),
+        ];
+
+    commands.append(&mut complete_projects.clone());
+
+    (complete_projects, commands)
 }

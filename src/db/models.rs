@@ -19,7 +19,7 @@ pub struct NewPath<'a> {
     pub prefix: &'a str,
 }
 
-#[derive(Serialize, Deserialize, Queryable, Selectable, Identifiable, Debug)]
+#[derive(Serialize, Deserialize, Queryable, Selectable, Identifiable, Debug, Clone)]
 #[diesel(table_name = projects)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Project {

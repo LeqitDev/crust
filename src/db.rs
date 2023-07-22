@@ -1,4 +1,5 @@
 use std::env;
+use std::fs::read_dir;
 
 use diesel::{SqliteConnection, Connection, sql_query};
 use diesel::prelude::*;
@@ -60,6 +61,24 @@ pub fn create_project(project_name: &str, project_path_id: &str) -> String {
     uuid
 }
 
+pub fn get_project(project_name: &str, project_path_id: &str) -> Option<Project> {
+    let mut connection = establish_connection();
+
+    if let Ok(found_projects) = projects.filter(name.eq(project_name)).filter(path_id.eq(project_path_id)).limit(1).load::<Project>(&mut connection) {
+        if found_projects.len() == 1 {
+            return Some((found_projects as Vec<Project>).get(0).unwrap().clone())
+        }
+    }
+
+    None
+}
+
+pub fn remove_project(project_name: &str, project_path_id: &str) {
+    let mut connection = establish_connection();
+
+    diesel::delete(&get_project(project_name, project_path_id).unwrap()).execute(&mut connection).expect("Error deleting project!");
+}
+
 pub fn get_all_projects(create_tables: bool) -> Index {
     let mut connection = establish_connection();
     if create_tables {
@@ -75,5 +94,57 @@ pub fn get_all_projects(create_tables: bool) -> Index {
         path_indexes.push(PathIndex { id: uuid, path: p.path, prefix: p.prefix, projects: project_list.iter().map(|p| &p.name).cloned().collect() });
     }
 
-    Index { paths: path_indexes }
+    let mut index = Index { paths: path_indexes };
+
+    update_path_projects(&mut index);
+
+    index
+}
+
+fn update_path_projects(index: &mut Index) {
+    for p in &mut index.paths {
+        let mut project_lookup: Vec<String> = vec![];
+        if let Ok(entries) = read_dir(&p.path) { // read all directorys in path
+
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    if entry.path().is_dir() {
+                        let project_name = entry.file_name().to_str().unwrap().to_string();
+                        if let Ok(project_entries) = read_dir(entry.path()) { // read all files in directory
+    
+                            for project_entry in project_entries {
+                                if let Ok(project_entry) = project_entry {
+                                    if project_entry.file_type().unwrap().is_file() {
+                                        if project_entry.file_name().to_str().unwrap() == "Cargo.toml" { // directory contains Cargo.toml -> rust project
+                                            if !project_indexed(&project_name, &p.id) {
+                                                create_project(&project_name, &p.id);
+                                                p.projects.push(project_name.clone());
+                                            }
+                                            project_lookup.push(project_name.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let mut remove_indexes: Vec<usize> = vec![];
+        for (index, path_project) in p.projects.iter().enumerate() {
+            if !project_lookup.contains(&path_project) {
+                remove_project(&path_project, &p.id);
+                remove_indexes.push(index);
+            }
+        }
+        remove_indexes.iter().for_each(|index| { p.projects.remove(*index); });
+    }
+}
+
+fn project_indexed(project_name: &str, project_path_id: &str) -> bool {
+    if get_project(project_name, project_path_id).is_some() {
+        true
+    } else {
+        false
+    }
 }
