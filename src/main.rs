@@ -14,6 +14,8 @@ extern crate dotenv;
 mod db;
 use db::*;
 
+
+const VERSION: &str = "0.0.2";
 // Helper Struct
 #[derive(Helper, Validator)]
 struct MyHelper {
@@ -133,7 +135,7 @@ fn main() -> Result<()> {
   ╚██████╗ ██║  ██║ ╚██████╔╝ ███████║    ██║
    ╚═════╝ ╚═╝  ╚═╝  ╚═════╝  ╚══════╝    ╚═╝   
   {}
-    ", format!("\x1b[32mv0.0.1\x1b[0m"));
+    ", format!("\x1b[32mv{}\x1b[0m", VERSION));
 
     print_projects(&projects);
 
