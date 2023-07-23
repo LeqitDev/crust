@@ -26,8 +26,8 @@ pub struct PathIndex {
 
 fn establish_connection() -> SqliteConnection {
     dotenv().ok();
-
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set!");
+    
+    let database_url = env::var("DATABASE_URL").unwrap_or(format!("{}/config/db.sqlite3", env::current_exe().expect("Couldn't read exe path!").parent().unwrap().as_os_str().to_str().unwrap()));
     SqliteConnection::establish(&database_url).unwrap_or_else(|_| panic!("Error connecting to {database_url}!"))
 }
 
