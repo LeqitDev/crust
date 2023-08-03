@@ -65,7 +65,3 @@ If you find any issues or have suggestions for improving Crust, please feel free
 ## License
 
 Crust is open-source software licensed under the [MIT License](https://opensource.org/licenses/MIT).
-
----
-
-Now you have a README file that introduces and explains the Crust Rust project. Feel free to modify and enhance the content as needed. Happy coding with Crust! 🦀
